@@ -1,0 +1,174 @@
+{% extends 'chatbot/base.html' %}
+{% block content %}
+
+<div class="bg-gradient-to-b from-pink-50 to-pink-200 min-h-screen flex flex-col">
+    <div class="max-w-4xl w-full mx-auto flex flex-col flex-grow h-screen">
+        <div class="px-4 sm:px-6 flex flex-col h-full overflow-hidden">
+
+            <!-- h-fit max-w-[80%] self-end whitespace-pre-wrap break-words rounded-2xl  px-5 py-3 dark:bg-midnight-750 text-base -->
+
+            <!-- Messages Container -->
+            <div
+                class="space-y-6 mb-6 overflow-y-auto px-2 custom-scrollbar flex-grow"
+                id="messages-container">
+                {% for message in messages %}
+                <div class="space-y-4">
+                    <!-- User Message -->
+                    <div class="flex items-start gap-3 justify-end">
+                        <div class="group flex flex-col items-end">
+                            <div
+                                class="bg-[#f7d0b3] text-gray-900 p-4 rounded-2xl max-w-[80%] transition-all duration-300">
+                                <p class="whitespace-pre-wrap">{{ message.user_message|default:"No message"}}</p>
+
+                            </div>
+                            <span
+                                class="text-xs text-gray-900 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                You • {{ message.timestamp|date:"g:i A" }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- AI Message -->
+                    <div class="flex items-start gap-3">
+                        <div class="group flex flex-col">
+                            <div
+                                class="p-4 rounded-2xl w-full transition-all duration-100">
+                                <p
+                                    class=" prose max-w-none"
+                                    x-data x-init="
+                                    $el.innerHTML = marked.parse(`{{ message.bot_response|escapejs }}`)
+                                "></p>
+                            </div>
+                            <span
+                                class="text-xs text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                AI Assistant • {{ message.timestamp|date:"g:i A" }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Message Input -->
+            <form id="message-form"
+                class="bg-white border-t py-4 sticky bottom-0 w-full z-10 px-4 rounded-lg mb-4">
+                {% csrf_token %}
+                <div class="relative flex items-end gap-2">
+                    <textarea
+                        name="user_message"
+                        id="user-message"
+                        rows="1"
+                        x-model="message"
+                        @keydown.enter.prevent="if (!$event.shiftKey) submitForm()"
+                        @input="$el.style.height = '0px'; $el.style.height = $el.scrollHeight + 'px'"
+                        class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[48px] max-h-[200px] transition-all placeholder-gray-400"
+                        placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+                        required></textarea>
+                    <button type="submit"
+                        class="px-4 py-3 bg-blue-500 text-white rounded-xl shadow-sm hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- Styles -->
+<style>
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+    
+</style>
+
+<!-- Auto-scroll to bottom -->
+<script>
+    document.getElementById('message-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm();
+    });
+    
+    function submitForm() {
+        const form = document.getElementById('message-form');
+        const messageInput = document.getElementById('user-message');
+        const message = messageInput.value.trim();
+        
+        if (!message) return;
+    
+        // Tampilkan pesan user segera
+        appendMessage(message, '', true);
+        messageInput.value = '';
+        messageInput.style.height = '48px';
+    
+        // Kirim pesan ke server
+        fetch('{% url "send_message" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `user_message=${encodeURIComponent(message)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Update pesan AI di container
+                appendMessage(data.bot_response, data.timestamp, false);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+    
+    function appendMessage(message, timestamp, isUser) {
+        const container = document.getElementById('messages-container');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'space-y-4';
+        
+        const html = isUser ? `
+            <div class="flex items-start gap-3 justify-end">
+                <div class="group flex flex-col items-end">
+                    <div class="bg-[#FFE8D6] text-gray-900 p-4 rounded-2xl max-w-[80%] transition-all duration-300">
+                        <p class="whitespace-pre-wrap">${message}</p>
+                    </div>
+                    <span class="text-xs text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        You • ${timestamp}
+                    </span>
+                </div>
+            </div>
+        ` : `
+            <div class="flex items-start gap-3">
+                <div class="group flex flex-col">
+                    <div class="p-4 rounded-2xl w-full transition-all duration-300">
+                        <p class="whitespace-pre-wrap prose prose-sm max-w-none">${marked.parse(message)}</p>
+                    </div>
+                    <span class="text-lg text-gray-900 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        AI Assistant • ${timestamp}
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        messageDiv.innerHTML = html;
+        container.appendChild(messageDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+    </script>
+
+{% endblock %}
